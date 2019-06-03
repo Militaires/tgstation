@@ -66,7 +66,7 @@
 		return
 	cooldown_last = world.time + cooldown_time
 	var/mob/H = parent
-	var/mutable_appearance/image_output
+	var/image/image_output
 	var/list/filtered = list()
 	var/list/seen = oview(echo_range, H)
 	var/list/receivers = list()
@@ -91,7 +91,7 @@
 		for(var/D in S.datum_outputs)
 			if(istype(D, /datum/outputs/echo_override))
 				var/datum/outputs/echo_override/O = D
-				image_output = mutable_appearance(O.vfx.icon, O.vfx.icon_state, S.layer, O.vfx.plane)
+				image_output = image(O.vfx.icon, null, O.vfx.icon_state, S.layer, O.vfx.plane)
 				echo_images["[S.icon]-[S.icon_state]"] = image_output
 		//generate caching key
 		if(istype(S, /obj/structure/table))
@@ -102,27 +102,23 @@
 			key = generate_smoothing_key(S)
 		else
 			key = "[S.icon]-[S.icon_state]" //no unique keying method? likely generic object (doesn't use overlays to make its icon)
-
 		if(echo_images[key])
-			image_output = mutable_appearance(echo_images[key].icon, echo_images[key].icon_state, echo_images[key].layer, echo_images[key].plane)
-			image_output.filters = echo_images[key].filters
+			image_output = echo_images[key]
 		else
 			image_output = generate_image(S)
 			echo_images[key] = image_output
 		show_image(receivers, image_output, S)
 
-/datum/component/echolocation/proc/show_image(list/receivers, mutable_appearance/mutable_echo, atom/input)
-	var/image/image_echo = image(mutable_echo)
-	image_echo.loc = input
-	image_echo.dir = input.dir
-	image_echo.appearance_flags = RESET_COLOR
-	image_echo.alpha = 0
+/datum/component/echolocation/proc/show_image(list/receivers, image/image_echo, atom/input)
 	for(var/M in receivers)
+		var/image/output = image(image_echo)
+		output.loc = input
+		output.dir = input.dir
 		var/mob/receiving_mob = M
 		if(receiving_mob.client)
-			receiving_mob.client.images += image_echo
-			animate(image_echo, alpha = 255, time = fade_in_time)
-			addtimer(CALLBACK(src, .proc/fade_image, image_echo, receiving_mob), image_expiry_time)
+			receiving_mob.client.images += output
+			animate(output, alpha = 255, time = fade_in_time)
+			addtimer(CALLBACK(src, .proc/fade_image, output, receiving_mob), image_expiry_time)
 
 /datum/component/echolocation/proc/fade_image(sound_image, mob/M)
 	animate(sound_image, alpha = 0, time = fade_out_time)
@@ -135,6 +131,7 @@
 
 /datum/component/echolocation/proc/generate_image(atom/input)
 	var/icon/I
+	var/image/final_image
 	if(istype(input, /turf/closed))
 		var/list/dirs = list()
 		for(var/direction in GLOB.cardinals)
@@ -152,16 +149,18 @@
 					I.DrawBox(null, 32, 2, 32, 31)
 				if(WEST)
 					I.DrawBox(null, 1, 2, 1, 31)
-			return mutable_appearance(I, null, input.layer, FULLSCREEN_PLANE)
+				final_image = image(I, null, null, input.layer, FULLSCREEN_PLANE)
 	else
 		if(needs_flattening[input.type])
 			I = getFlatIcon(input)
 		else
 			I = icon(input.icon, input.icon_state)
-		I.MapColors(rgb(0,0,0,0), rgb(0,0,0,0), rgb(0,0,0,255), rgb(0,0,0,-254))
-		var/mutable_appearance/final_image = mutable_appearance(I, input.icon_state, input.layer, FULLSCREEN_PLANE)
-		final_image.filters += filter(type="outline", size=1, color="#FFFFFF")
-		return final_image
+			I.MapColors(rgb(0,0,0,0), rgb(0,0,0,0), rgb(0,0,0,255), rgb(0,0,0,-254))
+			final_image = image(I, null,input.icon_state, input.layer, FULLSCREEN_PLANE, input.dir)
+			final_image.filters += filter(type="outline", size=1, color="#FFFFFF")
+	final_image.appearance_flags = RESET_COLOR
+	final_image.alpha = 0
+	return final_image
 
 /datum/component/echolocation/proc/generate_smoothing_key(atom/input)
 	var/list/dirs = list()
